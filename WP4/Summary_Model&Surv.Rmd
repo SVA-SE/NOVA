@@ -1,0 +1,517 @@
+---
+title: "Model 17: Results of 100 trajectories"
+output: html_document
+---
+```{r setup, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE, 
+                      fig.align='center', fig.height=5, fig.width=8, comment = NA)
+
+options(scipen=999)
+
+library(SimInf)
+library(SICR)
+library(knitr)
+library(kableExtra)
+library(sp)
+library(reshape2)  # for melt function
+library(ggplot2)
+
+
+```
+
+
+```{r load, include=FALSE, cache=FALSE}
+
+#load the empty initialized model
+load("C:/Users/arianna.comin/OneDrive - SVA/PROJECTS/NOVA/SalmoModel3.0/New_S.Dublin_SICR_ini.Rdata")
+
+# set the parameters as in model 17
+# Boost Uptake rate (S -> I)   [ remember beta and model changed ]
+# --------------------------
+model@gdata["upsilon_c"] <- 0.0042
+model@gdata["upsilon_y"] <- model@gdata["upsilon_c"]/2
+model@gdata["upsilon_a"] <- model@gdata["upsilon_c"]/3
+model@ldata[1,geo$oland] <- 0.28
+
+
+# load info on herds
+load("C:/Users/arianna.comin/OneDrive - SVA/PROJECTS/NOVA/SalmoModel3.0/SimulData/DataSummary_M17.RData")
+
+# load isurveillance eval summary
+load("SimulData/SurvEval2013_M17.RData")
+
+# load isurveillance eval summary
+load("SimulData/SurvEval2013more_M17.RData")
+
+time <- unique(AVG$time)
+
+```
+
+
+### List of paramter values and meanings  
+
+```{r show, echo=FALSE, cache=FALSE}
+library(knitr)
+library(kableExtra)
+par <- data.frame(parameter = c(names(model@gdata), "coupling_1", "coupling_2"),
+                  # value = model@gdata, 
+                  value = c(round(model@gdata[1],5), round(model@gdata[2],5), round(model@gdata[3],5),
+                            paste0("1/", 1/model@gdata[4]), 
+                            paste0("1/", 1/model@gdata[5]), 
+                            paste0("1/", 1/model@gdata[6]),
+                            model@gdata[7], model@gdata[8], model@gdata[9],
+                            paste0("1/", 1/model@gdata[10]), 
+                            paste0("1/", 1/model@gdata[11]), 
+                            paste0("1/", 1/model@gdata[12]),
+                            paste0("1/", 1/model@gdata[13]), 
+                            paste0("1/", 1/model@gdata[14]), 
+                            paste0("1/", 1/model@gdata[15]),
+                            model@gdata[16], model@gdata[17], model@gdata[18],
+                            paste0("1/", 1/model@gdata[19]),
+                            paste0("1/", round(1/model@gdata[20],2)),
+                            paste0("1/", round(1/model@gdata[21],2)),
+                            paste0("1/", round(1/model@gdata[22],2)),
+                            paste0("1/", round(1/model@gdata[23],2)),
+                            model@ldata[1,!geo$oland][1],
+                            model@ldata[1,geo$oland][1]),
+                  meaning = c("uptake rate for calves",
+                              "uptake rate for young (=1/2 upsilon_c)",
+                              "uptake rate for adults (=1/3 upsilon_c)",
+                              "recovery rate for infected calves (1/infectious period)",
+                              "recovery rate for infected young",
+                              "recovery rate for infected adults",
+                              "proportion of infected calves becoming carrier",
+                              "proportion of infected young becoming carrier",
+                              "proportion of infected adults becoming carrier",
+                              "recovery rate for carrier calves (1/carrier period)",
+                              "recovery rate for carrier young",
+                              "recovery rate for carrier adults",
+                              "imminity loss rate for calves (1/duration immunity)",
+                              "imminity loss rate for young",
+                              "imminity loss rate for adults",
+                              "bacterial shedding rate for calves",
+                              "bacterial shedding rate for young",
+                              "bacterial shedding rate for adults (reference)",
+                              "scaling factor for infectivity of carriers",
+                              "bacterial decay - season 1 (1/decimal reduction time)",
+                              "bacterial decay - season 2",
+                              "bacterial decay - season 3",
+                              "bacterial decay - season 4", 
+                              "spatial coupling mainland", 
+                              "spatial coupling Öland"),
+
+                  stringsAsFactors = FALSE)
+
+kable(par, row.names = FALSE, digits = 4, align = "lcl", "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left") 
+
+```
+
+
+&nbsp;
+
+### Seeding infected herds
+As in the old model, **5%** of dairy herds have been seeded as infected. They were randomly selected, proportionally to the county-level prevalence estimated from the national screening performed in 2013 +  additional weight to Öland and two kommun in Skåne (high risk area). Of the animals present in the infected herds, 8.2% of calves, 0.7% of young stock and 2.4% of the adults were allocated to the infectious state.  
+
+&nbsp;
+
+
+## Herd-level prevalence
+
+
+### Proportion of infected dairy herds by time (average of 100 trajectories) 
+Simulated proportion of infected dairy herds over the years. Grey solid lines represent each simulation (n=100). The black solid line represents their average. The blue dashed line represent the average from 2008 onward (the first years were excluded from the calculation as burn-in phase). The red dashed line represents the expected value for herd level prevalence. 
+
+```{r infherds, echo=FALSE, cache=FALSE}
+tt <- 132:444 # 2008 starts at time[132] 
+
+# Plot proportion of infected dairy herds
+avgIDH <- mean(BHP[,tt])
+plot(colMeans(BHP) ~ time, type="l", main="Herd-level prevalence", ylim=c(0, 0.05), 
+     ylab = "Proportion of infected dairy herds", xlab="time")
+for (i in 1:100) {
+  lines(BHP[i,] ~ time, type="l", col="grey80")
+}
+lines(colMeans(BHP) ~ time, type="l")
+abline(h=avgIDH, col="grey75", lty=2)
+segments(x0=time[min(tt)], y0=avgIDH, x1=time[max(tt)], y1=avgIDH, lty=2, col="blue")
+abline(h=0.01, lty=2, col="red")
+
+
+# Plot proportion of infected dairy herds in Öland
+avgIDH_o <- mean(BHP_O[,tt])
+plot(colMeans(BHP_O) ~ time, type="l", main="Herd-level prevalence in Öland", ylim=c(0, 0.60), 
+     ylab = "Proportion of infected dairy herds", xlab="time")
+for (i in 1:100) {
+  lines(BHP_O[i,] ~ time, type="l", col="grey80")
+}
+lines(colMeans(BHP_O) ~ time, type="l")
+abline(h=avgIDH_o, col="grey75", lty=2)
+segments(x0=time[min(tt)], y0=avgIDH_o, x1=time[max(tt)], y1=avgIDH_o, lty=2, col="blue")
+abline(h=0.15, lty=2, col="red")
+
+
+```
+&nbsp;
+
+## Within-herd infection dynamcs
+
+Average simulated within-herd infection dynamics by age group in infected dairy herds. Solid black lines represent the proportion of infected animals. Dashed black lines represent the proportion of carrier animals. Solid grey lines represent the proportion of recovered animals. Result of 100 simulations.
+
+```{r wid, echo=FALSE, cache=FALSE}
+source("C:/Users/arianna.comin/OneDrive - SVA/Playground/MyLittleR/MyFunctions/GetSeason.R")
+quart <- getQuarter(time)
+
+infHCount <- data.frame( inf = c(colSums(IC)/colSums(CAL), 
+                                 colSums(IY)/colSums(YOU), 
+                                 colSums(IA)/colSums(ADU)),
+                         car = c(colSums(CC)/colSums(CAL), 
+                                 colSums(CY)/colSums(YOU), 
+                                 colSums(CA)/colSums(ADU)),
+                         rec = c(colSums(RC)/colSums(CAL), 
+                                 colSums(RY)/colSums(YOU), 
+                                 colSums(RA)/colSums(ADU)),
+                         age = factor(ordered(c(rep("Calves", 444), 
+                                                rep("Young stock", 444), 
+                                                rep("Adults", 444))), 
+                                      levels=c("Calves", "Young stock", "Adults")),
+                         time=rep(time, 3),
+                         # season=rep(seas, 3), 
+                         quarter=rep(as.factor(quart),3))
+
+# -------------------- #
+# 1) aggregate by date #
+# -------------------- #
+ihcount_Y <- melt(infHCount[,-6], id.vars=c("age","time"), value.name="proportion")
+
+dim <- 13
+ggplot(ihcount_Y, aes(x=time, y=proportion)) + geom_line(size=1, aes(colour=variable, linetype=variable)) +
+  scale_colour_manual(values = c("black","black", "grey70"),
+                      name = "",
+                      breaks=c("inf", "car", "rec"),
+                      labels=c("Infected", "Carrier", "Recovered")) + 
+  scale_linetype_manual(values=c(1,2,1), name = "",
+                        breaks=c("inf", "car", "rec"),
+                        labels=c("Infected", "Carrier", "Recovered")) +
+  guides(colour=FALSE, linetype=FALSE) +
+  facet_grid(age ~ .) + xlab("Year") +
+  scale_y_continuous(limits=c(0, 0.30), breaks=c(0, 0.1, 0.2, 0.3),
+                     labels = function(x) paste0(x*100, "%")) + 
+  ylab("Proportion of animals in infected dairy herds\n") +   theme_bw() +
+  theme(axis.title.x = element_text(vjust=-0.5, colour="black", size=dim+1),
+        axis.title.y = element_text(vjust=1.5, colour="black", size=dim+1),
+        axis.text.x  = element_text(size=dim, colour="black"),
+        axis.text.y  = element_text(size=dim, colour="black"),
+        #         legend.position="bottom",
+        #         legend.key = element_blank(),
+        panel.grid.major = element_line(colour="grey85", size=0.3),
+        panel.grid.minor = element_line(colour="grey95", size=0.2),
+        strip.text.y = element_text(size=dim, colour="black", lineheight=2, vjust=0.8),
+        panel.spacing = unit(1, "lines")) 
+
+
+
+```
+
+&nbsp;
+
+Proportion of infected animals (i.e. prevalence) and recovered animals (i.e. seroprevalence) in infected dairy herds by age group and quarter of the year. Result of 100 simulations using data from 01-01-2008 to 31-12-2013.
+
+```{r widQ, echo=FALSE, cache=FALSE}
+
+# ---------------------------- #
+# 2) aggregate by year quarter #
+# ---------------------------- #
+
+# better to skip first few years to let simulation to adjust
+# -----------------------------------------------------
+start.year <- as.Date("2008-01-01", format = "%Y-%m-%d")
+ihcount_Q <- melt(infHCount[which(infHCount$time>=start.year),-5], 
+                  id.vars=c("age","quarter"), value.name="proportion")
+levels(ihcount_Q$quarter) <- c("1st quarter", "2nd quarter", "3rd quarter", "4th quarter")
+levels(ihcount_Q$variable) <- c("Infected", "Carrier", "Recovered")
+
+
+#-------------------------------------------------
+dim <- 13
+ggplot(ihcount_Q[which(ihcount_Q$variable!="Carrier"),], aes(x=age, y=proportion)) +
+  geom_boxplot(aes(fill=age)) + theme_bw() +
+  guides(fill=FALSE) +
+  ylab("Proportion of animals in infected dairy herds\n") +
+  scale_fill_manual(values = c("grey95","grey80", "grey60")) + 
+  facet_grid(variable~quarter,  scales="free_y") + xlab("") +
+  scale_x_discrete(labels = c("Calves" = "Calves","Young stock" = "Young","Adults" = "Adults")) +
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) +
+  theme(axis.title.y = element_text(vjust=1.5, colour="black", size=dim),
+        axis.title.x = element_blank(),
+        axis.text.x  = element_text(size=dim-2, colour="black"),
+        axis.text.y  = element_text(size=dim, colour="black"),
+        panel.grid.major = element_line(colour="grey85", size=0.3),
+        panel.grid.minor = element_line(colour="grey95", size=0.2),
+        strip.text.x = element_text(size=dim, colour="black", lineheight=2, vjust=0.7),
+        strip.text.y = element_text(size=dim, colour="black", lineheight=2, vjust=0.7),
+        panel.spacing = unit(0.5, "lines")) 
+
+
+
+```
+
+
+&nbsp;
+
+## Surveillance evaluation
+
+### Traditional surveillance
+Each dairy herd is sampled once every quarter of year for bulk milk serological testing. Infected herds that are detected (true positive) are then removed from the population under surveillance, because they enter another *track* (i.e. outbreak management). Uninfected herds that are erroneously detected (false positive) are withdrawn from the population under surveillance for 4 weeks (i.e. time to run confirmatory tests and identify the herd as negative) and then put back. 
+
+**Summary statistics**
+
+```{r tradQ, echo=FALSE, cache=FALSE}
+
+# Traditional by quarter -------------
+TR_Q <- rbind(apply(TR_Q1, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(TR_Q2, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(TR_Q3, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(TR_Q4, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))))
+TR_Q[,c(1:8)] <- round(TR_Q[,c(1:8)],0)
+TR_Q[,9:11] <- round(TR_Q[,9:11],2)
+
+traditional <- data.frame(var = c("active herds", "infected herds", "sampled herds", 
+                                  "Test+ herds", "True Positive (TP)", "False Positive (FP)",
+                                  "False Negative (FN)", "True Negative (TN)",
+                                  "True prevalence in sample", "Apparent prevalence in sample"),
+                          med_Q1 = as.character(TR_Q[1,-9]),
+                          CI_Q1 = paste0("[", TR_Q[2,-9], " - ", TR_Q[3,-9], "]"),
+                          med_Q2= as.character(TR_Q[4,-9]),
+                          CI_Q2 = paste0("[", TR_Q[5,-9], " - ", TR_Q[6,-9], "]"),
+                          med_Q3 = as.character(TR_Q[7,-9]),
+                          CI_Q3 = paste0("[", TR_Q[8,-9], " - ", TR_Q[9,-9], "]"),
+                          med_Q4 = as.character(TR_Q[10,-9]),
+                          CI_Q4 = paste0("[", TR_Q[11,-9], " - ", TR_Q[12,-9], "]"), 
+                          stringsAsFactors = FALSE)
+
+# fix colnames
+colnames(traditional) <- c("", rep(c("median", "95%CI"),4))
+
+kable(traditional, row.names = FALSE, align = "lrlrlrlrl", "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left") %>%
+  add_header_above(c(" " = 1, "1st quarter" = 2, "2nd quarter" = 2, 
+                     "3rd quarter" = 2, "4th quarter" = 2))
+
+
+```
+
+&nbsp;
+
+### Risk Based surveillance
+
+#### Strategy 1
+Each dairy herd in the *high risk area* (i.e. Öland and two municipalities in Skåne) is sampled once every quarter of year for bulk milk serological testing. Dairy herds in the  *low risk area* are tested once a year, during the **third quarter**. Infected herds that are detected (true positive) are then removed from the population under surveillance, because they enter another *track* (i.e. outbreak management). Uninfected herds that are erroneously detected (false positive) are withdrawn from the population under surveillance for 4 weeks (i.e. time to run confirmatory tests and identify the herd as negative) and then put back. 
+
+**Summary statistics**
+
+```{r riskQ1, echo=FALSE, cache=FALSE}
+
+# Risk Based by quarter -------------
+RB_Q <- rbind(apply(RB_Q1, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(RB_Q2, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(RB_Q3, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(RB_Q4, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))))
+RB_Q[,c(1:8)] <- round(RB_Q[,c(1:8)],0)
+RB_Q[,9:11] <- round(RB_Q[,9:11],2)
+
+riskbased1 <- data.frame(var = c("active herds", "infected herds", "sampled herds", 
+                                  "Test+ herds", "True Positive (TP)", "False Positive (FP)",
+                                  "False Negative (FN)", "True Negative (TN)",
+                                  "True prevalence in sample", "Apparent prevalence in sample"),
+                          med_Q1 = as.character(RB_Q[1,-9]),
+                          CI_Q1 = paste0("[", RB_Q[2,-9], " - ", RB_Q[3,-9], "]"),
+                          med_Q2= as.character(RB_Q[4,-9]),
+                          CI_Q2 = paste0("[", RB_Q[5,-9], " - ", RB_Q[6,-9], "]"),
+                          med_Q3 = as.character(RB_Q[7,-9]),
+                          CI_Q3 = paste0("[", RB_Q[8,-9], " - ", RB_Q[9,-9], "]"),
+                          med_Q4 = as.character(RB_Q[10,-9]),
+                          CI_Q4 = paste0("[", RB_Q[11,-9], " - ", RB_Q[12,-9], "]"), 
+                          stringsAsFactors = FALSE)
+
+# fix colnames
+colnames(riskbased1) <- c("", rep(c("median", "95%CI"),4))
+
+kable(riskbased1, row.names = FALSE, align = "lrlrlrlrl", "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left") %>%
+  add_header_above(c(" " = 1, "1st quarter" = 2, "2nd quarter" = 2, 
+                     "3rd quarter" = 2, "4th quarter" = 2))
+
+
+
+
+```
+
+&nbsp;
+
+
+#### Strategy 2
+Each dairy herd in the *high risk area* (i.e. Öland and two municipalities in Skåne) is sampled once every quarter of year for bulk milk serological testing. Dairy herds in the  *low risk area* are tested once a year, during the **fourth quarter**. Infected herds that are detected (true positive) are then removed from the population under surveillance, because they enter another *track* (i.e. outbreak management). Uninfected herds that are erroneously detected (false positive) are withdrawn from the population under surveillance for 4 weeks (i.e. time to run confirmatory tests and identify the herd as negative) and then put back. 
+
+**Summary statistics**
+
+```{r riskQ2, echo=FALSE, cache=FALSE}
+
+# Risk Based by quarter -------------
+RB2_Q <- rbind(apply(RB2_Q1, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(RB2_Q2, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(RB2_Q3, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(RB2_Q4, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))))
+RB2_Q[,c(1:8)] <- round(RB2_Q[,c(1:8)],0)
+RB2_Q[,9:11] <- round(RB2_Q[,9:11],2)
+
+riskbased2 <- data.frame(var = c("active herds", "infected herds", "sampled herds", 
+                                  "Test+ herds", "True Positive (TP)", "False Positive (FP)",
+                                  "False Negative (FN)", "True Negative (TN)",
+                                  "True prevalence in sample", "Apparent prevalence in sample"),
+                          med_Q1 = as.character(RB2_Q[1,-9]),
+                          CI_Q1 = paste0("[", RB2_Q[2,-9], " - ", RB2_Q[3,-9], "]"),
+                          med_Q2= as.character(RB2_Q[4,-9]),
+                          CI_Q2 = paste0("[", RB2_Q[5,-9], " - ", RB2_Q[6,-9], "]"),
+                          med_Q3 = as.character(RB2_Q[7,-9]),
+                          CI_Q3 = paste0("[", RB2_Q[8,-9], " - ", RB2_Q[9,-9], "]"),
+                          med_Q4 = as.character(RB2_Q[10,-9]),
+                          CI_Q4 = paste0("[", RB2_Q[11,-9], " - ", RB2_Q[12,-9], "]"), 
+                          stringsAsFactors = FALSE)
+
+# fix colnames
+colnames(riskbased2) <- c("", rep(c("median", "95%CI"),4))
+
+kable(riskbased2, row.names = FALSE, align = "lrlrlrlrl", "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left") %>%
+  add_header_above(c(" " = 1, "1st quarter" = 2, "2nd quarter" = 2, 
+                     "3rd quarter" = 2, "4th quarter" = 2))
+
+
+
+
+```
+
+&nbsp;
+
+#### Strategy 3
+**Only** dairy herds in the *high risk area* (i.e. Öland and two municipalities in Skåne) are sampled once every quarter of year for bulk milk serological testing. Infected herds that are detected (true positive) are then removed from the population under surveillance, because they enter another *track* (i.e. outbreak management). Uninfected herds that are erroneously detected (false positive) are withdrawn from the population under surveillance for 4 weeks (i.e. time to run confirmatory tests and identify the herd as negative) and then put back. 
+
+**Summary statistics**
+
+```{r riskQ3, echo=FALSE, cache=FALSE}
+
+# Risk Based by quarter -------------
+HR_Q <- rbind(apply(HR_Q1, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(HR_Q2, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(HR_Q3, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(HR_Q4, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))))
+HR_Q[,c(1:8)] <- round(HR_Q[,c(1:8)],0)
+HR_Q[,9:11] <- round(HR_Q[,9:11],2)
+
+riskbased3 <- data.frame(var = c("active herds", "infected herds", "sampled herds", 
+                                  "Test+ herds", "True Positive (TP)", "False Positive (FP)",
+                                  "False Negative (FN)", "True Negative (TN)",
+                                  "True prevalence in sample", "Apparent prevalence in sample"),
+                          med_Q1 = as.character(HR_Q[1,-9]),
+                          CI_Q1 = paste0("[", HR_Q[2,-9], " - ", HR_Q[3,-9], "]"),
+                          med_Q2= as.character(HR_Q[4,-9]),
+                          CI_Q2 = paste0("[", HR_Q[5,-9], " - ", HR_Q[6,-9], "]"),
+                          med_Q3 = as.character(HR_Q[7,-9]),
+                          CI_Q3 = paste0("[", HR_Q[8,-9], " - ", HR_Q[9,-9], "]"),
+                          med_Q4 = as.character(HR_Q[10,-9]),
+                          CI_Q4 = paste0("[", HR_Q[11,-9], " - ", HR_Q[12,-9], "]"), 
+                          stringsAsFactors = FALSE)
+
+# fix colnames
+colnames(riskbased3) <- c("", rep(c("median", "95%CI"),4))
+
+kable(riskbased3, row.names = FALSE, align = "lrlrlrlrl", "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left") %>%
+  add_header_above(c(" " = 1, "1st quarter" = 2, "2nd quarter" = 2, 
+                     "3rd quarter" = 2, "4th quarter" = 2))
+
+
+```
+
+&nbsp;
+
+
+
+### Comparison of surveillance strategies on a yearly basis
+
+**Average number of active herds** (i.e. with at least one animal) **under surveillance during one year.** The black line represent the default scenario where no surveillance is performed, so that infected herds are not detected and removed from the population under surveillance. The vertical dashed lines represent the sampling points (i.e. the median of each quarter). Average of 100 simulations.
+
+```{r active, echo=FALSE, cache=FALSE}
+
+par(mar=c(5.1,4.1,0.2,2.1))
+plot(colMeans(ACT), type="l", ylim = c(7100,7400), ylab= "number of ACTIVE dairy herds", xlab="week")
+abline(v=c(7,20,33, 46), lty=2, col="grey")
+lines(colMeans(ACT_h), col="purple")
+lines(colMeans(ACT_r2), col="orange")
+lines(colMeans(ACT_r), col="red")
+lines(colMeans(ACT_t), col="deepskyblue")
+lines(colMeans(ACT))
+legend(0, 7200, legend=c("None", "Traditional", "Risk based 1", "Risk based 2", "Risk based 3"),
+       title="Survellance Strategy", col=c("black","deepskyblue", "red", "orange", "purple"), 
+       box.lty=0, lty=1, cex=0.8)
+```
+
+&nbsp;
+
+**Average number of infected herds over the year.** The black line represent the default scenario where no surveillance is performed, so that infected herds are not detected. The vertical dashed lines represent the sampling points (i.e. the median of each quarter). Average of 100 simulations.  
+
+```{r infected, echo=FALSE, cache=FALSE}
+
+par(mar=c(5.1,4.1,0.2,2.1))
+plot(colMeans(INF), type="l", ylim = c(20,120), ylab= "number of INFECTED dairy herds", xlab="week")
+abline(v=c(7,20,33, 46), lty=2, col="grey")
+lines(colMeans(INF_h), col="purple")
+lines(colMeans(INF_r2), col="orange")
+lines(colMeans(INF_r), col="red")
+lines(colMeans(INF_t), col="deepskyblue")
+lines(colMeans(INF), col="black")
+legend(0, 120, legend=c("None", "Traditional", "Risk based 1", "Risk based 2", "Risk based 3"),
+       title="Survellance Strategy", col=c("black","deepskyblue", "red", "orange", "purple"), 
+       box.lty=0, lty=1, cex=0.8)
+```
+&nbsp;
+
+#### Summary statistics of the different surveillance strategies
+```{r comp, echo=FALSE, cache=FALSE}
+
+# Risk Based by quarter -------------
+comp <- rbind(apply(TR_Y, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))), 
+              apply(RB_Y, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(RB2_Y, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))),
+              apply(HR_Y, 2, function(x) quantile(x, c(0.5, 0.025, 0.975))))
+comp[,c(1:8,13)] <- round(comp[,c(1:8,13)],0)
+comp[,c(9:12)] <- round(comp[,c(9:12)],2)
+
+comparison <- data.frame(var = c("active herds", "infected herds", "sampled herds", 
+                                  "Test+ herds", "True Positive (TP)", "False Positive (FP)",
+                                  "False Negative (FN)", "True Negative (TN)",
+                                  "Prevalence", "Sensitivity (Se)", "Specificity (Sp)",
+                                 "Detection fraction", "Cost of detection"),
+                          med_TR = as.character(comp[1,]),
+                          CI_TR = paste0("[", comp[2,], " - ", comp[3,], "]"),
+                          med_RB= as.character(comp[4,]),
+                          CI_RB = paste0("[", comp[5,], " - ", comp[6,], "]"),
+                          med_RB2= as.character(comp[7,]),
+                          CI_RB3 = paste0("[", comp[8,], " - ", comp[9,], "]"),
+                          med_HR= as.character(comp[10,]),
+                          CI_HR = paste0("[", comp[11,], " - ", comp[12,], "]"),
+                          stringsAsFactors = FALSE)
+
+# fix colnames
+colnames(comparison) <- c("", rep(c("median", "95%CI"),4))
+
+kable(comparison, row.names = FALSE, align = "lcccccccc", "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left") %>%
+  add_header_above(c(" " = 1, "Traditional \nsurveillance" = 2, "Risk based surveillance \nstrategy 1" = 2,
+                     "Risk based surveillance\nstrategy 2" = 2, "Risk based surveillance\nstrategy 3" = 2))
+
+```
+
+**Detection Fraction** = proportion of infected herds that are detected during the year.  
+**Cost of detction** = number of bulk milk samples needed to detect one infected herds.
